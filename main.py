@@ -1,43 +1,53 @@
-import telebot
-import requests
-import time
+import os
+from flask import Flask, request
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-BOT_TOKEN = "8240785502:AAEHjQ0Ul2pEso8vTidrVUxbtV982LrRWAg87ef82debbd5ec8"
-API_KEY = "acde250d137c72b8f"
+# ============================
+# CONFIGURAÇÃO DO BOT
+# ============================
+TOKEN = os.environ.get("BOT_TOKEN", "8240785502:AAEHjQ0Ul2pEso8vTidrVUxbtV982LrRWAg87ef82debbd5ec8")
 
-bot = telebot.TeleBot(BOT_TOKEN)
+app_telegram = ApplicationBuilder().token(TOKEN).build()
 
-def get_odds():
-    url = "https://api.the-odds-api.com/v4/sports/upcoming/odds"
-    params = {
-        "apiKey": API_KEY,
-        "regions": "eu",
-        "markets": "h2h,spreads,totals",
-    }
-    r = requests.get(url, params=params)
-    if r.status_code != 200:
-        return None
-    return r.json()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Bot funcionando no Render!")
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.send_message(message.chat.id, "Bot de Odds Ativado!")
+app_telegram.add_handler(CommandHandler("start", start))
 
-@bot.message_handler(commands=['odds'])
-def send_odds(message):
-    odds = get_odds()
-    if not odds:
-        bot.send_message(message.chat.id, "Erro ao buscar odds.")
-        return
 
-    for event in odds[:3]:
-        text = f"🏆 *{event['sport_title']}*\n\n" \
-               f"🆚 {event['home_team']} x {event['away_team']}\n" \
-               f"⏰ {event['commence_time']}\n"
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+# ============================
+# FLASK - NECESSÁRIO PARA O RENDER
+# ============================
+flask_app = Flask(__name__)
 
-while True:
-    try:
-        bot.polling()
-    except:
-        time.sleep(3)
+@flask_app.route("/")
+def home():
+    return "Bot rodando no Render!"
+
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, app_telegram.bot)
+    app_telegram.process_update(update)
+    return "OK", 200
+
+
+# ============================
+# INICIALIZAÇÃO
+# ============================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+
+    import threading
+
+    # Rodar o Telegram em paralelo
+    def run_bot():
+        app_telegram.run_polling()
+
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.start()
+
+    # Rodar Flask
+    flask_app.run(host="0.0.0.0", port=port)
+

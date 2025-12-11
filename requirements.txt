@@ -1,3 +1,10 @@
-python-telegram-bot==20.7
-Flask==3.0.3
-gunicorn
+services:
+  - type: web
+    name: telegram-odds-bot
+    env: python
+    region: virginia
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn main:app"
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
